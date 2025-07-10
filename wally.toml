@@ -1,0 +1,6 @@
+[package]
+name = "femphilic/state"
+description = "A simple state management library for Roblox"
+version = "1.0.0"
+registry = "https://github.com/UpliftGames/wally-index"
+realm = "shared"

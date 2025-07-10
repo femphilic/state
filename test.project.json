@@ -1,0 +1,29 @@
+{
+  "name": "state-benchmark-test",
+  "tree": {
+    "$className": "DataModel",
+    "ReplicatedStorage": {
+      "State": {
+        "$path": "src"
+      },
+      "Shared": {
+        "$className": "Folder",
+        "Tests": {
+          "$path": "test/shared/tests.luau"
+        }
+      }
+    },
+    "ServerScriptService": {
+      "Server": {
+        "$path": "test/server"
+      }
+    },
+    "StarterPlayer": {
+      "StarterPlayerScripts": {
+        "Client": {
+          "$path": "test/client"
+        }
+      }
+    }
+  }
+}
