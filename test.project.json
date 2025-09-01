@@ -4,12 +4,18 @@
     "$className": "DataModel",
     "ReplicatedStorage": {
       "State": {
-        "$path": "src"
+        "$path": "src",
+        "Util": {
+          "$path": "src/Util.luau"
+        }
       },
       "Shared": {
         "$className": "Folder",
         "Tests": {
-          "$path": "test/shared/tests.luau"
+          "$path": "test/shared/tests.luau",
+          "Types": {
+            "$path": "test/shared/types.luau"
+          }
         }
       }
     },

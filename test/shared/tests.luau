@@ -5,32 +5,47 @@
 
 local module = {}
 
-local SERVER_STR = "SERVER"
-local CLIENT_STR = "CLIENT"
+local types = require(script.Types)
+
+local SERVER_STR = "SERVER" :: "SERVER"
+local CLIENT_STR = "CLIENT" :: "CLIENT"
 
 local TIME_STR =
-	`[%s] %s took %f seconds to create, %f seconds to connect, %f seconds to set, %f seconds to receive the value in the connection callback, %f seconds to disconnect, and %f seconds to destroy. This totals to %f seconds.`
+	"[%s] %s took %f seconds to create, %f seconds to connect, %f seconds to set, %f seconds to receive the value in the connection callback, %f seconds to disconnect, and %f seconds to destroy. This totals to %f seconds." :: "[%s] %s took %f seconds to create, %f seconds to connect, %f seconds to set, %f seconds to receive the value in the connection callback, %f seconds to disconnect, and %f seconds to destroy. This totals to %f seconds."
 local CONNECTION_TIME_STR =
-	`[%s] %s took %f seconds to connect %i times and %f seconds to receive %i times. This totals to %f seconds.`
+	"[%s] %s took %f seconds to connect %i times and %f seconds to receive %i times. This totals to %f seconds." :: "[%s] %s took %f seconds to connect %i times and %f seconds to receive %i times. This totals to %f seconds."
 
-local NUMBER_STATE_NAME = "numberState"
-local STRING_STATE_NAME = "stringState"
-local BOOLEAN_STATE_NAME = "booleanState"
-local NUMBER_TABLE_STATE_NAME = "numberTableState"
-local STRING_TABLE_STATE_NAME = "stringTableState"
-local BOOLEAN_TABLE_STATE_NAME = "booleanTableState"
+local STATE_NAMES: types.Enum<{
+	NUMBER_STATE_NAME: "numberState",
+	STRING_STATE_NAME: "stringState",
+	BOOLEAN_STATE_NAME: "booleanState",
+	NUMBER_TABLE_STATE_NAME: "numberTableState",
+	STRING_TABLE_STATE_NAME: "stringTableState",
+	BOOLEAN_TABLE_STATE_NAME: "booleanTableState",
+}> =
+	{
+		NUMBER_STATE_NAME = "numberState",
+		STRING_STATE_NAME = "stringState",
+		BOOLEAN_STATE_NAME = "booleanState",
+		NUMBER_TABLE_STATE_NAME = "numberTableState",
+		STRING_TABLE_STATE_NAME = "stringTableState",
+		BOOLEAN_TABLE_STATE_NAME = "booleanTableState",
+	}
 
 local rps = game:GetService("ReplicatedStorage")
 local rs = game:GetService("RunService")
 
 local State = require(rps.State)
+local StateUtil = require(rps.State.Util)
+
+type StateName = StateUtil.valueof<typeof(STATE_NAMES)>
 
 State.setDebugMode(true)
 State.setMaxConnections(1000) -- for testing purposes lol
 
 type TestType = number | string | boolean | { number } | { string } | { boolean }
 type Tests = {
-	[string]: {
+	[StateName]: {
 		new: TestType,
 		set: TestType,
 	},
@@ -54,27 +69,27 @@ function module.Init()
 	local isServer = rs:IsServer()
 
 	local tests = {
-		[NUMBER_STATE_NAME] = {
+		[STATE_NAMES.NUMBER_STATE_NAME] = {
 			new = 0,
 			set = 1,
 		},
-		[STRING_STATE_NAME] = {
+		[STATE_NAMES.STRING_STATE_NAME] = {
 			new = "new",
 			set = "set",
 		},
-		[BOOLEAN_STATE_NAME] = {
+		[STATE_NAMES.BOOLEAN_STATE_NAME] = {
 			new = false,
 			set = true,
 		},
-		[NUMBER_TABLE_STATE_NAME] = {
+		[STATE_NAMES.NUMBER_TABLE_STATE_NAME] = {
 			new = { 1 },
 			set = { 1, 2 },
 		},
-		[STRING_TABLE_STATE_NAME] = {
+		[STATE_NAMES.STRING_TABLE_STATE_NAME] = {
 			new = { "1" },
 			set = { "1", "2" },
 		},
-		[BOOLEAN_TABLE_STATE_NAME] = {
+		[STATE_NAMES.BOOLEAN_TABLE_STATE_NAME] = {
 			new = { true },
 			set = { true, false },
 		},
@@ -106,7 +121,7 @@ function module.Init()
 		return t.connected, max, t.received, max, getTotalConnectionTime(t)
 	end
 
-	local function testState(name: string)
+	local function testState(name: StateName)
 		local t: TimesTable = {
 			new = 0,
 			connected = 0,
@@ -124,12 +139,14 @@ function module.Init()
 		t.new = actualTime(t.new)
 		t.connected = nowTime(t.connected)
 
-		local connection: State.Connection = nil
+		local connection: State.Connection? = nil
 		connection = state:connect(function(value)
 			t.received = actualTime(t.received)
 			t.disconnected = nowTime(t.disconnected)
 
-			connection:disconnect()
+			if connection then
+				connection:disconnect()
+			end
 
 			t.disconnected = actualTime(t.disconnected)
 			t.destroyed = nowTime(t.destroyed)
@@ -138,7 +155,7 @@ function module.Init()
 
 			t.destroyed = actualTime(t.destroyed)
 
-			print(TIME_STR:format(isServer and SERVER_STR or CLIENT_STR, name, getStringArguments(t)))
+			print(string.format(TIME_STR, isServer and SERVER_STR or CLIENT_STR, name, getStringArguments(t)))
 
 			local max = State.getMaxConnections()
 
@@ -160,7 +177,8 @@ function module.Init()
 						state2:destroy()
 						ct.received = actualTime(ct.received)
 						print(
-							CONNECTION_TIME_STR:format(
+							string.format(
+								CONNECTION_TIME_STR,
 								isServer and SERVER_STR or CLIENT_STR,
 								`{name}ConnectionTest`,
 								getConnectionStringArguments(ct, max)

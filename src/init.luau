@@ -29,11 +29,19 @@ local State = {}
 local DEBUG_MODE = false -- Set to true for development debugging
 local MAX_CONNECTIONS = 100 -- Prevent memory leaks
 
+-- Type hack
+type typedraw = ((og: typeof(rawget)) -> <T>(t: T, k: keyof<T>) -> Util.valueof<T>) & ((og: typeof(rawset)) -> <T>(t: T, k: keyof<T>, v: Util.valueof<T>) -> ()) & ((og: typeof(rawlen)) -> <T>(t: T) -> number) & ((og: typeof(rawequal)) -> <T>(t1: T, t2: Util.valueof<T>) -> boolean)
+local typedraw: typedraw = function(og)
+	return function(t, ...)
+		return og(t :: { [string]: any }, ... :: any) :: any
+	end
+end
+
 -- Cache common functions for better performance
 local type = type
 local typeof = typeof
-local rawget = rawget
-local rawset = rawset
+local rawget = typedraw(rawget)
+local rawset = typedraw(rawset)
 local table_clone = table.clone
 local task_spawn = task.spawn
 local setmetatable = setmetatable
@@ -54,10 +62,10 @@ local statePrototype = {
 	_debugName = nil,
 } :: StatePrototype
 
-type StatePrototype = {
+type StatePrototype ={
 	_state: any,
 	_hasHadDefinedState: boolean,
-	_connections: { [number]: (value: any) -> () },
+	_connections: ({ [number]: (value: any) -> () })?,
 	_connectionCount: number,
 	_isDestroyed: boolean,
 	_debugName: string?,
@@ -115,7 +123,7 @@ function stateMetatable.__newindex(t, key, value)
 end
 
 function stateMetatable.__call(t)
-	return rawget(t, "_state")
+	return rawget(t , "_state")
 end
 
 function stateMetatable.__concat(t1, t2)
@@ -127,7 +135,7 @@ function stateMetatable.__concat(t1, t2)
 	end
 
 	local newState = table_clone(statePrototype)
-	local class = setmetatable(newState, stateMetatable) :: any
+	local class = setmetatable(newState, stateMetatable) :: StatePrototype
 	local stateType = type(state1)
 
 	if stateType == "string" then
@@ -135,7 +143,7 @@ function stateMetatable.__concat(t1, t2)
 	elseif stateType == "number" then
 		rawset(class, "_state", (state1 :: number) + (state2 :: number))
 	elseif stateType == "table" then
-		rawset(class, "_state", Util.MergeTables(state1, state2))
+		rawset(class, "_state", Util.MergeTables(state1 :: any, state2 :: any))
 	else
 		error(`Attempted to concat states of unsupported type: {typeof(state1)}`)
 	end
@@ -181,7 +189,7 @@ function statePrototype:set(newState)
 		return
 	end
 
-	local connections = self._connections
+	local connections = self._connections :: Util.NonNullable<typeof(self._connections)>
 	for id, callback in connections do
 		if type(callback) == "function" then
 			task_spawn(function()
@@ -212,6 +220,8 @@ function statePrototype:connect(callback)
 		rawset(self, "_connections", {})
 	end
 
+	local connections = self._connections :: Util.NonNullable<typeof(self._connections)>
+
 	if self._connectionCount >= MAX_CONNECTIONS then
 		error(`Maximum number of connections ({MAX_CONNECTIONS}) exceeded`)
 	end
@@ -221,48 +231,19 @@ function statePrototype:connect(callback)
 	connectionIdCounter += 1
 	local connectionId = connectionIdCounter
 
-	local newConnection = table_clone(connectionPrototype) :: any
+	local newConnection = table_clone(connectionPrototype)
 	newConnection._state = self
 	newConnection._id = connectionId
-	newConnection._callback = function(value)
-		callback(value)
-	end
+	newConnection._callback = callback
 
-	-- Connection methods
-	function newConnection:disconnect()
-		if not self._state or self._state._isDestroyed then
-			return
-		end
-
-		local connections = self._state._connections
-		local id = self._id
-
-		if connections[id] then
-			connections[id] = nil
-			self._state._connectionCount -= 1
-
-			if DEBUG_MODE and self._state._debugName then
-				print(`[{self._state._debugName}] Connection removed (ID: {id})`)
-			end
-		end
-
-		self._state = nil
-		self._callback = nil
-		self._id = nil
-	end
-
-	function newConnection:isConnected()
-		return self._state ~= nil and not self._state._isDestroyed
-	end
-
-	self._connections[connectionId] = newConnection._callback
+	connections[connectionId] = ((newConnection :: any) :: { _callback: typeof(connections[1]) })._callback
 	self._connectionCount += 1
 
 	if DEBUG_MODE and self:getDebugName() then
 		print(`[{self:getDebugName()}] New connection added (ID: {connectionId})`)
 	end
 
-	return newConnection :: Connection
+	return (newConnection :: any) :: Connection
 end
 
 function statePrototype:destroy()
@@ -273,7 +254,7 @@ function statePrototype:destroy()
 	self._isDestroyed = true
 
 	-- Disconnect all connections
-	local connections = self._connections
+	local connections = self._connections :: Util.NonNullable<typeof(self._connections)>
 	for id in connections do
 		connections[id] = nil
 	end
@@ -312,22 +293,22 @@ type Class<T> = {
 	getDebugName: (self: State<T>) -> string?,
 }
 type Metatable<T> = {
-	__index: (t: State<T>, key: string) -> (),
-	__newindex: (t: State<T>, key: string, value: any) -> (),
-	__call: (t: State<T>) -> T,
-	__concat: (t: State<T>, other: State<T>) -> State<T>,
+	__index: (key: string) -> (),
+	__newindex: (key: string, value: any) -> (),
+	__call: () -> T,
+	__concat: (other: State<T>) -> State<T>,
 	__metatable: Metatable<T>,
 }
 
-export type State<T> = typeof(setmetatable(statePrototype :: Class<T>, stateMetatable :: Metatable<T>))
+export type State<T> = setmetatable<Class<T>, Metatable<T>>
 
 -- Public API
 function State.new<T>(initialState: T, debugName: string?): State<T>
 	local newState = table_clone(statePrototype)
-	local class = setmetatable(newState, stateMetatable) :: any
+	local class = setmetatable(newState, stateMetatable)
 
 	rawset(class, "_state", initialState)
-	rawset(class, "_hasHadDefinedState", initialState ~= nil)
+	rawset(class, "_hasHadDefinedState", (initialState :: any) ~= nil)
 	rawset(class, "_connections", {})
 	rawset(class, "_connectionCount", 0)
 	rawset(class, "_isDestroyed", false)
@@ -337,7 +318,7 @@ function State.new<T>(initialState: T, debugName: string?): State<T>
 		print(`[{debugName}] State created with initial value: {tostring(initialState)}`)
 	end
 
-	return class :: State<T>
+	return (class :: any) :: State<T>
 end
 
 -- Utility functions
