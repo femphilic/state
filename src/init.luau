@@ -296,7 +296,7 @@ type Metatable<T> = {
 	__index: (key: string) -> (),
 	__newindex: (key: string, value: any) -> (),
 	__call: () -> T,
-	__concat: (other: State<T>) -> State<T>,
+	__concat: (initial: State<T>, other: State<T>) -> State<T>,
 	__metatable: Metatable<T>,
 }
 
